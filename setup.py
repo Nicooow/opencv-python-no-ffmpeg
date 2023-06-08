@@ -32,13 +32,18 @@ def main():
         'numpy>=1.19.3; python_version>="3.6" and platform_system=="Linux" and platform_machine=="aarch64"',
         'numpy>=1.21.0; python_version<="3.9" and platform_system=="Darwin" and platform_machine=="arm64"',
         'numpy>=1.21.4; python_version>="3.10" and platform_system=="Darwin"',
-        "numpy>=1.22.0; python_version>='3.11'"
+        "numpy>=1.23.5; python_version>='3.11'"
     ]
 
     python_version = cmaker.CMaker.get_python_version()
-    python_lib_path = cmaker.CMaker.get_python_library(python_version).replace(
-        "\\", "/"
-    )
+    python_lib_path = cmaker.CMaker.get_python_library(python_version) or ""
+    # HACK: For Scikit-build 0.17.3 and newer that returns None or empty sptring for PYTHON_LIBRARY in manylinux2014
+    # A small release related to PYTHON_LIBRARY handling changes in 0.17.2; scikit-build 0.17.3 returns an empty string from get_python_library if no Python library is present (like on manylinux), where 0.17.2 returned None, and previous versions returned a non-existent path. Note that adding REQUIRED to find_package(PythonLibs will fail, but it is incorrect (you must not link to libPython.so) and was really just injecting a non-existent path before.
+    # TODO: Remove the hack when the issue is handled correctly in main OpenCV CMake.
+    if python_lib_path == "":
+        python_lib_path = "libpython%sm.a" % python_version
+    python_lib_path = python_lib_path.replace("\\", "/")
+
     python_include_dir = cmaker.CMaker.get_python_include_dir(python_version).replace(
         "\\", "/"
     )
@@ -157,6 +162,7 @@ def main():
         + [
             # skbuild inserts PYTHON_* vars. That doesn't satisfy opencv build scripts in case of Py3
             "-DPYTHON3_EXECUTABLE=%s" % sys.executable,
+            "-DPYTHON_DEFAULT_EXECUTABLE=%s" % sys.executable,
             "-DPYTHON3_INCLUDE_DIR=%s" % python_include_dir,
             "-DPYTHON3_LIBRARY=%s" % python_lib_path,
             "-DBUILD_opencv_python3=ON",
